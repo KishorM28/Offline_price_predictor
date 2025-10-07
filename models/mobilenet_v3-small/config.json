@@ -1,0 +1,7 @@
+{
+  "architectures": [
+    "MobileNetV3ForImageClassification"
+  ],
+  "model_type": "mobilenet_v3",
+  "num_labels": 3
+}
