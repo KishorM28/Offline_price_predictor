@@ -1,11 +1,10 @@
 # File: integrated_async_offline.py
 # Purpose: Offline system with Keras MobileNetV3 fallback + Price prediction
 
-import os
 from flask import Flask, request, jsonify
 import pandas as pd
 import numpy as np
-import datetime, base64, warnings
+import datetime, json, base64, warnings
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
@@ -99,7 +98,7 @@ def call_fallback_model_from_base64(base64_str):
 # --- Flask API ---
 app = Flask(__name__)
 
-REQUIRED_FIELDS = ['Product_Name','Region_Name','Harvest_Month',
+REQUIRED_FIELDS = ['encoded_image_file','Product_Name','Region_Name','Harvest_Month',
                    'Market_Demand_Index','Storage_Cost_Index','Pest_Damage_Ratio',
                    'Current_Temperature_C','Last_7_Days_Rainfall_MM']
 
@@ -111,22 +110,16 @@ def predict():
         return jsonify({"error":"Missing features","missing":missing}),400
 
     try:
-        # Use Base64 string if provided, else read from file
-        if 'encoded_image_base64' in data:
-            base64_img = data['encoded_image_base64']
-        elif 'encoded_image_file' in data:
-            with open(data['encoded_image_file'], 'r') as f:
-                base64_img = f.read().strip()
-        else:
-            base64_img = None
+        # Read Base64 string from file
+        encoded_file_path = data['encoded_image_file']
+        with open(encoded_file_path,'r') as f:
+            base64_img = f.read().strip()
 
-        if base64_img:
-            grade_output = call_fallback_model_from_base64(base64_img)
-            grade = grade_output.get('quality_grade','B')
-            justification = grade_output.get('justification','No justification')
-        else:
-            grade = 'B'
-            justification = 'No image provided'
+        # Offline fallback model
+        grade_output = call_fallback_model_from_base64(base64_img)
+
+        grade = grade_output.get('quality_grade','B')
+        justification = grade_output.get('justification','No justification')
 
         quality_score = GRADE_TO_SCORE_MAP.get(grade,7.5)
         product_code = PRODUCT_NAME_TO_CODE_MAP.get(data['Product_Name'])
@@ -160,8 +153,6 @@ def predict():
     except Exception as e:
         return jsonify({"error":"Prediction failed","details":str(e)}),500
 
-# --- ENTRY POINT FOR RENDER/Heroku ---
 if __name__=="__main__":
     print("--- Starting Integrated System with Offline Keras MobileNetV3 ---")
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
